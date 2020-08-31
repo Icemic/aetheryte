@@ -1,0 +1,12 @@
+[package]
+name = "awaki"
+version = "0.1.0"
+authors = ["ubuntu"]
+edition = "2018"
+license = "GPL-3.0"
+
+[dependencies]
+libc = "0.2.73"
+nix = "0.18.0"
+tokio = { version = "0.2", features = ["full"] }
+maxminddb = "0.14.0"
