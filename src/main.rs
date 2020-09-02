@@ -11,6 +11,7 @@ use tokio::fs;
 // use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use ctrlc;
 
 pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
     let addr = getsockopt(fd.as_raw_fd(), OriginalDst).map_err(|e| match e {
@@ -125,7 +126,12 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box
 
 #[tokio::main]
 async fn main() {
-    println!("Hello, world!");
+    println!("Awaki is running.");
+
+    ctrlc::set_handler(|| {
+        println!("\nGoodbye.");
+        exit(0);
+    }).expect("Error setting Ctrl-C handler");
 
     let geo_db_file = match fs::read("data/GeoLite2-Country.mmdb").await {
         Ok(file) => file,
