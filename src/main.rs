@@ -189,14 +189,14 @@ async fn main() {
         if dst_country_code != "CN" {
             let transfer = proxy(socket, dst_addr.clone()).map(|r| {
                 if let Err(e) = r {
-                    println!("Failed to transfer: {}", e);
+                    println!("Failed to proxy from {} to {}:{} in {}: {}", addr, dst_ip, dst_port, dst_country_code, e);
                 }
             });
             tokio::spawn(transfer);
         } else {
             let transfer = transfer(socket, dst_addr.clone()).map(|r| {
                 if let Err(e) = r {
-                    println!("Failed to transfer: {}", e);
+                    println!("Failed to transfer from {} to {}:{} in {}: {}", addr, dst_ip, dst_port, dst_country_code, e);
                 }
             });
             tokio::spawn(transfer);
