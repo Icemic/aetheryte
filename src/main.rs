@@ -4,7 +4,6 @@ use maxminddb::geoip2;
 use maxminddb::Reader;
 use nix::sys::socket::{getsockopt};
 use nix::sys::socket::sockopt::OriginalDst;
-use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::process::exit;
 use std::{io::ErrorKind, net::SocketAddrV4, os::unix::io::AsRawFd};
@@ -55,10 +54,10 @@ pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
 //     }
 // }
 
-async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
+async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, String> {
     let mut outbound = match TcpStream::connect(dst_addr).await {
         Err(e) => {
-            panic!("{}: {}", info_message, e);
+            return Err(format!("{}: {}", info_message, e));
         }
         Ok(r) => {
             r
@@ -80,7 +79,7 @@ async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: 
 
     match try_join(client_to_server, server_to_client).await {
         Err(e) => {
-            panic!("{}: {}", info_message, e);
+            Err(format!("{}: {}", info_message, e))
         }
         Ok(_) => {
             Ok(info_message)
@@ -88,22 +87,29 @@ async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: 
     }
 }
 
-async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
+async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, String> {
     let mut outbound = match TcpStream::connect("127.0.0.1:1086").await {
         Err(e) => {
-            panic!("{}: {}", info_message, e);
+            return Err(format!("{}: {}", info_message, e));
         }
         Ok(r) => {
             r
         }
     };
 
-    outbound.write(&[5, 1, 0]).await?;
+    match outbound.write(&[5, 1, 0]).await {
+        Err(e) => {
+            return Err(format!("{}: {}", info_message, e));
+        }
+        Ok(r) => {
+            r
+        }
+    };
 
     let mut buf = [0 as u8; 20];
     let size = outbound.read(&mut buf).await.unwrap();
     if size != 2 || buf[0] != 5 || buf[1] != 0 {
-        panic!("{}: connect to socks5 proxy failed.", info_message);
+        return Err(format!("{}: connect to socks5 proxy failed.", info_message));
     }
 
     let mut data: [u8; 10] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0];
@@ -118,13 +124,20 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc
     data[8] = port_big_endian[0];
     data[9] = port_big_endian[1];
 
-    outbound.write(&data).await?;
+    match outbound.write(&data).await {
+        Err(e) => {
+            return Err(format!("{}: {}", info_message, e));
+        }
+        Ok(r) => {
+            r
+        }
+    };
 
     let size = outbound.read(&mut buf).await.unwrap();
     if size == 10 && buf[0] == 5 && buf[1] == 0 {
         // println!("连接建立成功");
     } else {
-        panic!("{}: connect to socks5 proxy failed with error code {}", info_message, buf[1]);
+        return Err(format!("{}: connect to socks5 proxy failed with error code {}", info_message, buf[1]));
     }
 
     let (mut ri, mut wi) = inbound.split();
@@ -145,7 +158,7 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc
             Ok(info_message)
         }
         Err(e) => {
-            panic!("{}: {}", info_message, e);
+            Err(format!("{}: {}", info_message, e))
         }
     }
 }
