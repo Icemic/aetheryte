@@ -2,7 +2,8 @@ use futures::future::try_join;
 use futures::FutureExt;
 use maxminddb::geoip2;
 use maxminddb::Reader;
-use nix::sys::socket::{getsockopt, sockopt::OriginalDst};
+use nix::sys::socket::{getsockopt};
+use nix::sys::socket::sockopt::OriginalDst;
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::process::exit;
@@ -12,6 +13,7 @@ use tokio::fs;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use ctrlc;
+use std::sync::Arc;
 
 pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
     let addr = getsockopt(fd.as_raw_fd(), OriginalDst).map_err(|e| match e {
@@ -53,7 +55,7 @@ pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
 //     }
 // }
 
-async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box<dyn Error>> {
+async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
     let mut outbound = TcpStream::connect(dst_addr).await?;
 
     let (mut ri, mut wi) = inbound.split();
@@ -69,12 +71,17 @@ async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), 
         wi.shutdown().await
     };
 
-    try_join(client_to_server, server_to_client).await?;
-
-    Ok(())
+    match try_join(client_to_server, server_to_client).await {
+        Err(e) => {
+            panic!("{}: {}", info_message, e);
+        }
+        Ok(_) => {
+            Ok(info_message)
+        }
+    }
 }
 
-async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box<dyn Error>> {
+async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
     let mut outbound = TcpStream::connect("127.0.0.1:1086").await?;
 
     outbound.write(&[5, 1, 0]).await?;
@@ -82,7 +89,7 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box
     let mut buf = [0 as u8; 20];
     let size = outbound.read(&mut buf).await.unwrap();
     if size != 2 || buf[0] != 5 || buf[1] != 0 {
-        panic!("connect to socks5 proxy failed.");
+        panic!("{}: connect to socks5 proxy failed.", info_message);
     }
 
     let mut data: [u8; 10] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0];
@@ -103,7 +110,7 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box
     if size == 10 && buf[0] == 5 && buf[1] == 0 {
         // println!("连接建立成功");
     } else {
-        panic!("connect to socks5 proxy failed with error code {}", buf[1]);
+        panic!("{}: connect to socks5 proxy failed with error code {}", info_message, buf[1]);
     }
 
     let (mut ri, mut wi) = inbound.split();
@@ -119,9 +126,14 @@ async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4) -> Result<(), Box
         wi.shutdown().await
     };
 
-    try_join(client_to_server, server_to_client).await?;
-
-    Ok(())
+    match try_join(client_to_server, server_to_client).await {
+        Ok(_) => {
+            Ok(info_message)
+        }
+        Err(e) => {
+            panic!("{}: {}", info_message, e);
+        }
+    }
 }
 
 #[tokio::main]
@@ -181,22 +193,28 @@ async fn main() {
         };
         let dst_country_code = info.country.unwrap().iso_code.unwrap_or_default();
 
-        println!(
-            "from {}, to: {}:{} in {}",
-            addr, dst_ip, dst_port, dst_country_code
-        );
+        let info_message = format!("from {}, to {}:{} in {}",
+            addr, dst_ip, dst_port, dst_country_code);
+
+        println!("{}", info_message);
+
+        let info_message = Arc::new(info_message);
 
         if dst_country_code != "CN" {
-            let transfer = proxy(socket, dst_addr.clone()).map(|r| {
+            let transfer = proxy(socket, dst_addr.clone(), info_message.clone()).map(|r| {
                 if let Err(e) = r {
-                    println!("Failed to proxy from {} to {}:{} in {}: {}", addr, dst_ip, dst_port, dst_country_code, e);
+                    println!("Failed to proxy {}", e);
+                } else if let Ok(info) = r {
+                    println!("Success to proxy {}", info);
                 }
             });
             tokio::spawn(transfer);
         } else {
-            let transfer = transfer(socket, dst_addr.clone()).map(|r| {
+            let transfer = transfer(socket, dst_addr.clone(), info_message.clone()).map(|r| {
                 if let Err(e) = r {
-                    println!("Failed to transfer from {} to {}:{} in {}: {}", addr, dst_ip, dst_port, dst_country_code, e);
+                    println!("Failed to transfer {}", e);
+                } else if let Ok(info) = r {
+                    println!("Success to transfer {}", info);
                 }
             });
             tokio::spawn(transfer);
