@@ -58,7 +58,7 @@ jobs:
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
       - name: Login to Aliyun
-        uses: denverdino/acr-login@v0.1.0
+        uses: aliyun/acr-login@v1
         with:
           login-server: https://registry.cn-hangzhou.aliyuncs.com
           username: '${{ secrets.ALIYUN_REGISTRY_USERNAME }}'
