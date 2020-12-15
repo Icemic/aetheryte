@@ -56,7 +56,14 @@ pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
 // }
 
 async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
-    let mut outbound = TcpStream::connect(dst_addr).await?;
+    let mut outbound = match TcpStream::connect(dst_addr).await {
+        Err(e) => {
+            panic!("{}: {}", info_message, e);
+        }
+        Ok(r) => {
+            r
+        }
+    };
 
     let (mut ri, mut wi) = inbound.split();
     let (mut ro, mut wo) = outbound.split();
@@ -82,7 +89,14 @@ async fn transfer(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: 
 }
 
 async fn proxy(mut inbound: TcpStream, dst_addr: SocketAddrV4, info_message: Arc<String>) -> Result<Arc<String>, Box<dyn Error>> {
-    let mut outbound = TcpStream::connect("127.0.0.1:1086").await?;
+    let mut outbound = match TcpStream::connect("127.0.0.1:1086").await {
+        Err(e) => {
+            panic!("{}: {}", info_message, e);
+        }
+        Ok(r) => {
+            r
+        }
+    };
 
     outbound.write(&[5, 1, 0]).await?;
 
@@ -196,7 +210,7 @@ async fn main() {
         let info_message = format!("from {}, to {}:{} in {}",
             addr, dst_ip, dst_port, dst_country_code);
 
-        println!("{}", info_message);
+        // println!("{}", info_message);
 
         let info_message = Arc::new(info_message);
 
