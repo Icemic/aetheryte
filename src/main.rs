@@ -21,23 +21,23 @@ async fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
-    // let mut dns_server = DNSServer::new().await;
+    let mut dns_server = DNSServer::new().await;
     // dns_server.start().await;
 
-    router_main().await;
+    // router_main().await;
 
-    // let x = async {
-    //     dns_server.start().await
-    // };
+    let x = async {
+        dns_server.start().await
+    };
 
-    // let y = async {
-    //     router_main().await
-    // };
+    let y = async {
+        router_main().await
+    };
 
-    // match try_join(x, y).await {
-    //     Ok(_) => {},
-    //     Err(err) => {
-    //         panic!(err);
-    //     }
-    // }
+    match try_join(x, y).await {
+        Ok(_) => {},
+        Err(err) => {
+            panic!(err);
+        }
+    }
 }
