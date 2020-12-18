@@ -70,5 +70,6 @@ pub async fn main() -> Result<(), ()> {
             tokio::spawn(transfer);
         }
     }
+    #[allow(unreachable_code)]
     Ok(())
 }
