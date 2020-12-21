@@ -17,14 +17,14 @@ impl DNSServer {
         } else {
             "[::]:0".parse().unwrap()
         };
-        let mut socket = UdpSocket::bind(local_addr).await.unwrap();
+        let socket = UdpSocket::bind(local_addr).await.unwrap();
         socket.connect(remote_addr.to_string()).await.unwrap();
         socket.send(&message.into_octets()).await.unwrap();
 
         let duration = tokio::time::Duration::from_millis(500);
         let mut ret_message;
         loop {
-            let mut buf = vec![0u8; 4096];
+            let mut buf = vec![0u8; 1024];
             let size = match timeout(duration, socket.recv(&mut buf)).await {
                 Ok(r) => r.unwrap(),
                 Err(_) => {

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::dns::DNSServer;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -5,6 +7,7 @@ use tokio::fs;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DNSSettings {
     upstreams: Vec<DNSServerUpstream>,
+    custom_hosts: HashMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

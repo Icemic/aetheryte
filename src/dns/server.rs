@@ -9,10 +9,10 @@ pub struct DNSServer {
 
 impl DNSServer {
     pub async fn new() -> Self {
-        let server = match UdpSocket::bind("0.0.0.0:5353").await {
+        let server = match UdpSocket::bind("127.0.0.1:5354").await {
             Ok(server) => server,
-            Err(_) => {
-                panic!("error on udp listening");
+            Err(e) => {
+                panic!("error on udp listening: {}", e);
             }
         };
         let settings = Self::load_settings().await;
@@ -40,7 +40,7 @@ impl DNSServer {
 
             // self.lookup_udp
             let ret_message = self
-                .lookup_udp(message, "8.8.8.8:53".parse().unwrap())
+                .lookup_tcp(message, "114.114.114.114:53".parse().unwrap())
                 .await
                 .unwrap();
 

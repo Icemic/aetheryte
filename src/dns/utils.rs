@@ -58,4 +58,13 @@ impl DNSServer {
         }
         false
     }
+    // add 2-byte head to packet
+    pub fn get_wrapped_packet(&self, message: Message<Vec<u8>>) -> Vec<u8> {
+        let buf = &mut message.into_octets();
+        let mut packet = Vec::with_capacity(2 + buf.len());
+        packet.push((buf.len() >> 8) as u8);
+        packet.push(buf.len() as u8);
+        packet.append(buf);
+        packet
+    }
 }
