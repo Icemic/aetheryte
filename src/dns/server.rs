@@ -24,11 +24,9 @@ impl DNSServer {
                     panic!("error on udp listening: {}", e);
                 }
             };
-        // Message::from_octets(octets)
         DNSServer { server, settings }
     }
     pub async fn start(&mut self) -> Result<(), ()> {
-        // let mut buf = BytesMut::with_capacity(1024);
         let mut buf = vec![0u8; 4096];
         loop {
             let (size, addr) = match self.server.recv_from(&mut buf).await {
@@ -42,14 +40,12 @@ impl DNSServer {
             let message = Message::from_octets(buf[..size].to_vec()).unwrap();
             let domain = message.first_question().unwrap().qname().to_string();
 
-            println!("[{}, {} bytes] {}", addr.to_string(), size, domain);
-
             let message = self.decorate_message(message);
 
             // self.lookup_udp
             let ret_message = self
                 // .lookup_tcp(message, "8.8.8.8:53".parse().unwrap())
-                .lookup_dot(message, "223.5.5.5:853".parse().unwrap(), "dns.alidns.com")
+                .lookup_doh(message, "223.5.5.5".to_string(), "dns.alidns.com")
                 .await
                 .unwrap();
 
@@ -58,13 +54,17 @@ impl DNSServer {
                 .unwrap()
                 .limit_to::<AllRecordData<_, _>>();
 
+            let mut i = 0;
             for answer in answers {
+                i += 1;
                 let answer = answer.expect("parsing has failed.");
                 println!(
-                    "rtype {}, class {}, {}",
+                    "[UDP {}] {} --> {} ({}) #{}",
+                    addr.to_string(),
+                    domain,
+                    answer.data().to_string(),
                     answer.rtype(),
-                    answer.class(),
-                    answer.data().to_string()
+                    i
                 );
             }
 

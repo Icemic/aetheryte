@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use crate::dns::DNSServer;
 use domain::base::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -9,9 +7,9 @@ impl DNSServer {
     pub async fn lookup_tcp(
         &self,
         message: Message<Vec<u8>>,
-        remote_addr: SocketAddr,
+        remote_addr: std::string::String,
     ) -> Result<Message<Vec<u8>>, String> {
-        let mut socket = TcpStream::connect(remote_addr.to_string()).await.unwrap();
+        let mut socket = TcpStream::connect(format!("{}:{}", remote_addr, 53)).await.unwrap();
 
         let packet = self.get_wrapped_packet(message);
         socket.write(&packet).await.unwrap();
