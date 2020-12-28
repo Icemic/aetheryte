@@ -14,10 +14,10 @@ use tokio_rustls::{
 impl DNSServer {
     pub async fn lookup_doh(
         &self,
-        message: Message<Vec<u8>>,
-        remote_addr: std::string::String,
-        hostname: &str,
-    ) -> Result<Message<Vec<u8>>, String> {
+        message: &Message<Vec<u8>>,
+        remote_addr: &std::string::String,
+        hostname: &std::string::String,
+    ) -> Result<(String, Message<Vec<u8>>), String> {
         let mut config = ClientConfig::new();
         config.root_store = load_native_certs().unwrap();
         config.enable_sni = true;
@@ -34,7 +34,7 @@ impl DNSServer {
             .unwrap();
 
         // let packet = self.get_wrapped_packet(message);
-        let packet = message.into_octets();
+        let packet = message.as_octets();
 
         let mut data = std::string::String::new();
         data.push_str("POST /dns-query HTTP/1.1\r\n");
@@ -85,7 +85,7 @@ impl DNSServer {
         let ret_message = Message::from_octets(packet.to_vec()).unwrap();
 
         if self.is_valid_response(&ret_message) {
-            return Ok(ret_message);
+            return Ok(("DoH".to_string(), ret_message));
         }
 
         Err("[DoH] Invalid DNS message format.".to_string())

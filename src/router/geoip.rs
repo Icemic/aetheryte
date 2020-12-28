@@ -19,14 +19,11 @@ impl GeoIP {
         }
     }
     pub fn lookup_country_code(&self, ip: &Ipv4Addr) -> &str {
-        let info: Country = match self.reader.lookup(IpAddr::V4(*ip)) {
-            Ok(info) => info,
-            Err(_) => {
-                println!("error on lookup addr geo info");
-                // fallback to US
-                self.reader.lookup(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))).unwrap()
-            }
-        };
-        info.country.unwrap().iso_code.unwrap_or_default()
+        if let Ok(info) = self.reader.lookup::<Country>(IpAddr::V4(*ip)) {
+            info.country.unwrap().iso_code.unwrap_or_default()
+        } else {
+            // println!("warning: error on lookup addr geo info");
+            "ERROR"
+        }
     }
 }

@@ -6,17 +6,21 @@ use tokio::{net::UdpSocket, time::timeout};
 impl DNSServer {
     pub async fn lookup_udp(
         &self,
-        message: Message<Vec<u8>>,
-        remote_addr: SocketAddr,
-    ) -> Result<Message<Vec<u8>>, String> {
+        message: &Message<Vec<u8>>,
+        remote_addr: &std::string::String,
+    ) -> Result<(String, Message<Vec<u8>>), String> {
+        let remote_addr: SocketAddr = remote_addr.parse().unwrap();
         let local_addr: SocketAddr = if remote_addr.is_ipv4() {
             "0.0.0.0:0".parse().unwrap()
         } else {
             "[::]:0".parse().unwrap()
         };
         let socket = UdpSocket::bind(local_addr).await.unwrap();
-        socket.connect(format!("{}:{}", remote_addr, 53)).await.unwrap();
-        socket.send(&message.into_octets()).await.unwrap();
+        socket
+            .connect(format!("{}:{}", remote_addr, 53))
+            .await
+            .unwrap();
+        socket.send(message.as_octets()).await.unwrap();
 
         let duration = tokio::time::Duration::from_millis(500);
         let mut ret_message;
@@ -34,6 +38,6 @@ impl DNSServer {
             }
         }
 
-        Ok(ret_message)
+        Ok(("UDP".to_string(), ret_message))
     }
 }

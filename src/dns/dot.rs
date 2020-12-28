@@ -13,10 +13,10 @@ use tokio_rustls::{
 impl DNSServer {
     pub async fn lookup_dot(
         &self,
-        message: Message<Vec<u8>>,
-        remote_addr: std::string::String,
-        hostname: &str,
-    ) -> Result<Message<Vec<u8>>, String> {
+        message: &Message<Vec<u8>>,
+        remote_addr: &std::string::String,
+        hostname: &std::string::String,
+    ) -> Result<(String, Message<Vec<u8>>), String> {
         let mut config = ClientConfig::new();
         config.root_store = load_native_certs().unwrap();
         config.enable_sni = true;
@@ -24,7 +24,9 @@ impl DNSServer {
         config.versions = vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2];
         let connector = TlsConnector::from(Arc::new(config));
 
-        let socket = TcpStream::connect(format!("{}:{}", remote_addr, 853)).await.unwrap();
+        let socket = TcpStream::connect(format!("{}:{}", remote_addr, 853))
+            .await
+            .unwrap();
 
         let mut socket = connector
             .connect(DNSNameRef::try_from_ascii_str(hostname).unwrap(), socket)
@@ -58,7 +60,7 @@ impl DNSServer {
         let ret_message = Message::from_octets(packet[2..].to_vec()).unwrap();
 
         if self.is_valid_response(&ret_message) {
-            return Ok(ret_message);
+            return Ok(("DoT".to_string(), ret_message));
         }
 
         Err("[DoT] Packet size checking failed.".to_string())

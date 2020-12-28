@@ -4,7 +4,7 @@ mod proxy;
 mod utils;
 
 use futures::FutureExt;
-use geoip::GeoIP;
+pub use geoip::GeoIP;
 use passthrough::passthrough;
 use proxy::proxy;
 use std::process::exit;
