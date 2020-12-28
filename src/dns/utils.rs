@@ -1,12 +1,19 @@
 use crate::dns::DNSServer;
-use domain::base::opt::{ClientSubnet, KeyTag, Padding, TcpKeepalive};
+use domain::base::{
+    opt::{ClientSubnet, KeyTag, Padding, TcpKeepalive},
+    record::AsRecord,
+};
 use domain::{
     base::Message,
     base::{iana::Opcode, opt::rfc7830::PaddingMode, MessageBuilder},
 };
 
 impl DNSServer {
-    pub fn decorate_message(&self, origin: Message<Vec<u8>>) -> Message<Vec<u8>> {
+    pub fn decorate_message<T: AsRecord>(
+        &self,
+        origin: &Message<Vec<u8>>,
+        answers: Option<Vec<T>>,
+    ) -> Message<Vec<u8>> {
         // message.header().set_rd(true);
         // message.opt().unwrap().rcode(header)
         let mut msg = MessageBuilder::new_vec();
@@ -21,6 +28,13 @@ impl DNSServer {
         for question in origin.question() {
             let question = question.unwrap();
             msg.push(question).unwrap();
+        }
+
+        let mut msg = msg.answer();
+        if let Some(answers) = answers {
+            for answer in answers {
+                msg.push(answer).unwrap();
+            }
         }
 
         let mut msg = msg.additional();

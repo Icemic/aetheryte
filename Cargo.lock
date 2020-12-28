@@ -7,6 +7,7 @@ dependencies = [
  "ctrlc",
  "domain",
  "futures",
+ "glob",
  "libc",
  "maxminddb",
  "nix 0.19.1",
@@ -205,6 +206,12 @@ dependencies = [
  "libc",
  "wasi",
 ]
+
+[[package]]
+name = "glob"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8be18de09a56b60ed0edf84bc9df007e30040691af7acd1c41874faac5895bfb"
 
 [[package]]
 name = "hermit-abi"

@@ -9,6 +9,7 @@ version = "0.1.0"
 ctrlc = {version = "3.1", features = ["termination"]}
 domain = "0.5"
 futures = "0.3"
+glob = "0.2"
 libc = "0.2"
 maxminddb = "0.17"
 nix = "0.19"

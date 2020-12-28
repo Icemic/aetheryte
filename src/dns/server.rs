@@ -1,7 +1,12 @@
 use super::settings::DNSSettings;
 use crate::router::GeoIP;
-use domain::{base::Message, rdata::AllRecordData};
+use domain::rdata::A;
+use domain::{
+    base::{Dname, Message, Record},
+    rdata::AllRecordData,
+};
 use futures::{future::select_ok, Future};
+use glob::Pattern;
 use std::{net::Ipv4Addr, pin::Pin};
 use tokio::net::UdpSocket;
 
@@ -9,12 +14,14 @@ pub struct DNSServer {
     server: UdpSocket,
     geoip: GeoIP,
     settings: DNSSettings,
+    pub custom_patterns: Vec<(Pattern, String)>,
 }
 
 impl DNSServer {
     pub async fn new() -> Self {
         let settings = Self::load_settings().await;
         let geoip = GeoIP::new().await;
+        let custom_patterns = Self::load_patterns(&settings);
         let server =
             match UdpSocket::bind(format!("{}:{}", settings.listen_ip, settings.listen_port)).await
             {
@@ -33,6 +40,7 @@ impl DNSServer {
             server,
             geoip,
             settings,
+            custom_patterns,
         }
     }
     pub async fn start(&mut self) -> Result<(), ()> {
@@ -49,9 +57,20 @@ impl DNSServer {
             let message = Message::from_octets(buf[..size].to_vec()).unwrap();
             let domain = message.first_question().unwrap().qname().to_string();
 
-            let message = &self.decorate_message(message);
-
-            let (method, is_china, ret_message) = self.batch_query(&message).await;
+            let method;
+            let is_china;
+            let ret_message;
+            if let Some(message) = self.lookup_custom(&message) {
+                method = "Custom".to_string();
+                is_china = true;
+                ret_message = message;
+            } else {
+                let message = &self.decorate_message::<Record<Dname<&[u8]>, A>>(&message, None);
+                let result = self.batch_query(&message).await;
+                method = result.0;
+                is_china = result.1;
+                ret_message = result.2;
+            }
             let answers = ret_message
                 .answer()
                 .unwrap()
