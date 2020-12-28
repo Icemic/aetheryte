@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use crate::dns::DNSServer;
 use domain::base::Message;
-use tokio::prelude::*;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{net::TcpStream, time::timeout, time::Duration};
 
 impl DNSServer {
@@ -17,8 +17,7 @@ impl DNSServer {
         socket.write(&packet).await.unwrap();
 
         let mut packet = Vec::with_capacity(1024);
-        let size = match timeout(Duration::from_millis(500), socket.read_to_end(&mut packet)).await
-        {
+        let size = match timeout(Duration::from_millis(500), socket.read_buf(&mut packet)).await {
             Ok(r) => r.unwrap(),
             Err(_) => {
                 return Err("Query timeout.".to_string());

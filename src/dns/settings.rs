@@ -6,19 +6,22 @@ use tokio::fs;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DNSSettings {
-    upstreams: Vec<DNSServerUpstream>,
-    custom_hosts: HashMap<String, String>,
+    pub listen_ip: std::string::String,
+    pub listen_port: u16,
+    pub query_timeout: u32,
+    pub upstreams: Vec<DNSServerUpstream>,
+    pub custom_hosts: HashMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DNSServerUpstream {
-    address: String,
-    hostname: String,
-    enable_udp: bool,
-    enable_tcp: bool,
-    enable_doh: bool,
-    enable_dot: bool,
-    is_china: bool,
+    pub address: String,
+    pub hostname: String,
+    pub enable_udp: bool,
+    pub enable_tcp: bool,
+    pub enable_doh: bool,
+    pub enable_dot: bool,
+    pub is_china: bool,
 }
 
 impl DNSServer {
@@ -31,7 +34,7 @@ impl DNSServer {
                 settings
             }
             Err(_) => {
-                panic!("failed to open geolite2 mmdb file");
+                panic!("failed to open settings file.");
             }
         }
     }

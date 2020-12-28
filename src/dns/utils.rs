@@ -28,10 +28,10 @@ impl DNSServer {
             opt.set_dnssec_ok(true);
             opt.set_udp_payload_size(1024);
             opt.set_version(0);
-            let option1 = ClientSubnet::new(16, 16, "127.0.0.1".parse().unwrap());
-            let option2 = ClientSubnet::new(64, 64, "fe80::".parse().unwrap());
+            let option1 = ClientSubnet::new(24, 0, "122.233.242.188".parse().unwrap());
+            let option2 = ClientSubnet::new(64, 0, "240e:390:e5b:8280::1".parse().unwrap());
             let padding = Padding::new(31, PaddingMode::Zero);
-            let tcp_keepalive = TcpKeepalive::new(150);
+            let tcp_keepalive = TcpKeepalive::new(20);
             let key_tag = KeyTag::new(&[1, 2, 3, 82]);
 
             opt.push(&option1).unwrap();

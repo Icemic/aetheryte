@@ -9,13 +9,21 @@ pub struct DNSServer {
 
 impl DNSServer {
     pub async fn new() -> Self {
-        let server = match UdpSocket::bind("127.0.0.1:5354").await {
-            Ok(server) => server,
-            Err(e) => {
-                panic!("error on udp listening: {}", e);
-            }
-        };
         let settings = Self::load_settings().await;
+        let server =
+            match UdpSocket::bind(format!("{}:{}", settings.listen_ip, settings.listen_port)).await
+            {
+                Ok(server) => {
+                    println!(
+                        "DNS service now is serving on udp://{}:{}",
+                        settings.listen_ip, settings.listen_port
+                    );
+                    server
+                }
+                Err(e) => {
+                    panic!("error on udp listening: {}", e);
+                }
+            };
         // Message::from_octets(octets)
         DNSServer { server, settings }
     }
@@ -40,7 +48,8 @@ impl DNSServer {
 
             // self.lookup_udp
             let ret_message = self
-                .lookup_tcp(message, "114.114.114.114:53".parse().unwrap())
+                // .lookup_tcp(message, "8.8.8.8:53".parse().unwrap())
+                .lookup_dot(message, "223.5.5.5:853".parse().unwrap(), "dns.alidns.com")
                 .await
                 .unwrap();
 
