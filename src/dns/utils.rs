@@ -52,7 +52,9 @@ impl DNSServer {
                 if (message.answer().is_ok() && message.answer().unwrap().count() != 0)
                     || (message.authority().is_ok() && message.authority().unwrap().count() != 0)
                 {
-                    return true;
+                    if message.opt().is_some() && message.opt().unwrap().dnssec_ok() {
+                        return true;
+                    }
                 }
             }
         }
