@@ -9,23 +9,20 @@ impl DNSServer {
         message: &Message<Vec<u8>>,
         remote_addr: &std::string::String,
     ) -> Result<(String, Message<Vec<u8>>), String> {
-        let remote_addr: SocketAddr = remote_addr.parse().unwrap();
+        let remote_addr: SocketAddr = format!("{}:{}", remote_addr, 53).parse().unwrap();
         let local_addr: SocketAddr = if remote_addr.is_ipv4() {
             "0.0.0.0:0".parse().unwrap()
         } else {
             "[::]:0".parse().unwrap()
         };
         let socket = UdpSocket::bind(local_addr).await.unwrap();
-        socket
-            .connect(format!("{}:{}", remote_addr, 53))
-            .await
-            .unwrap();
+        socket.connect(remote_addr).await.unwrap();
         socket.send(message.as_octets()).await.unwrap();
 
         let duration = tokio::time::Duration::from_millis(500);
         let mut ret_message;
         loop {
-            let mut buf = Vec::with_capacity(1024);
+            let mut buf = vec![0u8; 1024];
             let size = match timeout(duration, socket.recv(&mut buf)).await {
                 Ok(r) => r.unwrap(),
                 Err(_) => {

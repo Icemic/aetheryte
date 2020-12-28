@@ -1,10 +1,7 @@
-use super::settings::{self, DNSSettings};
+use super::settings::DNSSettings;
 use crate::router::GeoIP;
 use domain::{base::Message, rdata::AllRecordData};
-use futures::{
-    future::{join_all, select_all, select_ok},
-    join, Future,
-};
+use futures::{future::select_ok, Future};
 use std::{net::Ipv4Addr, pin::Pin};
 use tokio::net::UdpSocket;
 
@@ -110,19 +107,19 @@ impl DNSServer {
                 queries.push(Box::pin(ret_message));
             }
             if upstream.enable_dot {
-                let ret_message = self.lookup_dot(&message, &upstream.address, &upstream.hostname);
+                let ret_message = self.lookup_dot(message, &upstream.address, &upstream.hostname);
                 queries.push(Box::pin(ret_message));
             }
             if upstream.enable_doh {
-                let ret_message = self.lookup_doh(&message, &upstream.address, &upstream.hostname);
+                let ret_message = self.lookup_doh(message, &upstream.address, &upstream.hostname);
                 queries.push(Box::pin(ret_message));
             }
         }
 
-        let ((method, ret_message_china), _) = select_ok(queries_china).await.unwrap();
-
-        if self.is_china_site(&ret_message_china) {
-            return (method, true, ret_message_china);
+        if let Ok(((method, ret_message_china), _)) = select_ok(queries_china).await {
+            if self.is_china_site(&ret_message_china) {
+                return (method, true, ret_message_china);
+            }
         }
 
         let (ret_message, _) = select_ok(queries_abroad).await.unwrap();
