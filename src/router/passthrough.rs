@@ -1,14 +1,14 @@
 use futures::future::try_join;
 use std::net::SocketAddrV4;
-use std::sync::Arc;
+use tokio::io;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use tokio::prelude::*;
 
 pub async fn passthrough(
     mut inbound: TcpStream,
     dst_addr: SocketAddrV4,
-    info_message: Arc<String>,
-) -> Result<Arc<String>, String> {
+    info_message: String,
+) -> Result<String, String> {
     let mut outbound = match TcpStream::connect(dst_addr).await {
         Err(e) => {
             return Err(format!("{}: {}", info_message, e));

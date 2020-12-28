@@ -2,7 +2,7 @@ use nix::sys::socket::getsockopt;
 use nix::sys::socket::sockopt::OriginalDst;
 use std::{io::ErrorKind, net::SocketAddrV4, os::unix::io::AsRawFd};
 use tokio::net::TcpStream;
-use tokio::prelude::*;
+use tokio::io;
 
 pub fn get_original_dest(fd: &TcpStream) -> io::Result<SocketAddrV4> {
     let addr = getsockopt(fd.as_raw_fd(), OriginalDst).map_err(|e| match e {
