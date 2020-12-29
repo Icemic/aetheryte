@@ -145,7 +145,7 @@ impl DNSServer {
             }
         }
 
-        let duration = Duration::from_millis(3000);
+        let duration = Duration::from_millis(1000);
 
         if let Ok(((method, ret_message_china), _)) =
             timeout(duration, select_ok(queries_china)).await?
