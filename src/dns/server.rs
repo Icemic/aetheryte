@@ -7,6 +7,7 @@ use domain::{
 };
 use futures::{future::select_ok, Future};
 use glob::Pattern;
+use std::io::Error;
 use std::{net::Ipv4Addr, pin::Pin};
 use tokio::net::UdpSocket;
 
@@ -103,10 +104,10 @@ impl DNSServer {
 
     async fn batch_query(&self, message: &Message<Vec<u8>>) -> (String, bool, Message<Vec<u8>>) {
         let mut queries_china: Vec<
-            Pin<Box<dyn Future<Output = Result<(String, Message<Vec<u8>>), String>>>>,
+            Pin<Box<dyn Future<Output = Result<(String, Message<Vec<u8>>), Error>>>>,
         > = vec![];
         let mut queries_abroad: Vec<
-            Pin<Box<dyn Future<Output = Result<(String, Message<Vec<u8>>), String>>>>,
+            Pin<Box<dyn Future<Output = Result<(String, Message<Vec<u8>>), Error>>>>,
         > = vec![];
 
         for upstream in &self.settings.upstreams {
@@ -146,8 +147,11 @@ impl DNSServer {
     }
     fn is_china_site(&self, message: &Message<Vec<u8>>) -> bool {
         let mut answers_china = message.answer().unwrap().limit_to::<AllRecordData<_, _>>();
-
-        if let Ok(answer_first_china) = answers_china.next().unwrap() {
+        let answer = answers_china.next();
+        if answer.is_none() {
+            return false;
+        }
+        if let Ok(answer_first_china) = answer.unwrap() {
             let rtype = answer_first_china.rtype().to_string();
             let ip = answer_first_china.data().to_string();
             let ip: Ipv4Addr = match ip.parse() {

@@ -1,6 +1,7 @@
 use crate::dns::DNSServer;
 use domain::base::Message;
 use rustls_native_certs::load_native_certs;
+use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -17,21 +18,18 @@ impl DNSServer {
         message: &Message<Vec<u8>>,
         remote_addr: &std::string::String,
         hostname: &std::string::String,
-    ) -> Result<(String, Message<Vec<u8>>), String> {
+    ) -> Result<(String, Message<Vec<u8>>), Error> {
         let mut config = ClientConfig::new();
         config.root_store = load_native_certs().unwrap();
         config.enable_sni = true;
         config.enable_early_data = true;
         config.versions = vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2];
         let connector = TlsConnector::from(Arc::new(config));
-        let socket = TcpStream::connect(format!("{}:{}", remote_addr, 443))
-            .await
-            .unwrap();
+        let socket = TcpStream::connect(format!("{}:{}", remote_addr, 443)).await?;
 
         let mut socket = connector
             .connect(DNSNameRef::try_from_ascii_str(hostname).unwrap(), socket)
-            .await
-            .unwrap();
+            .await?;
 
         // let packet = self.get_wrapped_packet(message);
         let packet = message.as_octets();
@@ -43,21 +41,19 @@ impl DNSServer {
         data.push_str(format!("Content-Length: {}\r\n", packet.len()).as_str());
         data.push_str("\r\n");
 
-        socket.write(&data.as_bytes()).await.unwrap();
-        socket.write(&packet).await.unwrap();
+        socket.write(&data.as_bytes()).await?;
+        socket.write(&packet).await?;
 
         // It stores the response message
         let mut packet = Vec::with_capacity(1024);
 
-        match timeout(Duration::from_millis(1000), socket.read_buf(&mut packet)).await {
-            Ok(r) => r.unwrap(),
-            Err(_) => {
-                return Err("Query timeout.".to_string());
-            }
-        };
+        timeout(Duration::from_millis(1000), socket.read_buf(&mut packet)).await??;
 
         if std::str::from_utf8(&packet[..15]).unwrap() != "HTTP/1.1 200 OK" {
-            return Err("[DoH] non-200 status response.".to_string());
+            return Err(Error::new(
+                ErrorKind::Other,
+                "[DoH] non-200 status response.".to_string(),
+            ));
         }
 
         // find response body size
@@ -67,7 +63,10 @@ impl DNSServer {
         {
             Some(p) => p,
             None => {
-                return Err("[DoH] Wrong response.".to_string());
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "[DoH] Wrong response.".to_string(),
+                ));
             }
         };
         let body_size: Vec<u8> = packet
@@ -88,6 +87,9 @@ impl DNSServer {
             return Ok(("DoH".to_string(), ret_message));
         }
 
-        Err("[DoH] Invalid DNS message format.".to_string())
+        Err(Error::new(
+            ErrorKind::InvalidData,
+            "[DoH] Packet size checking failed.".to_string(),
+        ))
     }
 }
