@@ -99,6 +99,19 @@ impl DNSServer {
                 );
             }
 
+            if i == 0 {
+                println!(
+                    "[{} {} {}] {} --> {} ({}) #{}",
+                    method,
+                    if is_china { "China" } else { "Abroad" },
+                    addr.to_string(),
+                    domain,
+                    "-",
+                    "-",
+                    i
+                );
+            }
+
             self.server
                 .send_to(&ret_message.into_octets(), addr)
                 .await
