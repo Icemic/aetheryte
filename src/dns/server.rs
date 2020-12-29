@@ -10,6 +10,7 @@ use glob::Pattern;
 use std::io::Error;
 use std::{net::Ipv4Addr, pin::Pin};
 use tokio::net::UdpSocket;
+use tokio::time::{timeout, Duration};
 
 pub struct DNSServer {
     server: UdpSocket,
@@ -37,6 +38,7 @@ impl DNSServer {
                     panic!("error on udp listening: {}", e);
                 }
             };
+        server.set_ttl(2).unwrap();
         DNSServer {
             server,
             geoip,
@@ -67,10 +69,14 @@ impl DNSServer {
                 ret_message = message;
             } else {
                 let message = &self.decorate_message::<Record<Dname<&[u8]>, A>>(&message, None);
-                let result = self.batch_query(&message).await;
-                method = result.0;
-                is_china = result.1;
-                ret_message = result.2;
+                if let Ok(result) = self.batch_query(&message).await {
+                    method = result.0;
+                    is_china = result.1;
+                    ret_message = result.2;
+                } else {
+                    println!("[Warning] batch query timeout, skip the task.");
+                    continue;
+                }
             }
             let answers = ret_message
                 .answer()
@@ -102,7 +108,10 @@ impl DNSServer {
         Ok(())
     }
 
-    async fn batch_query(&self, message: &Message<Vec<u8>>) -> (String, bool, Message<Vec<u8>>) {
+    async fn batch_query(
+        &self,
+        message: &Message<Vec<u8>>,
+    ) -> Result<(String, bool, Message<Vec<u8>>), Error> {
         let mut queries_china: Vec<
             Pin<Box<dyn Future<Output = Result<(String, Message<Vec<u8>>), Error>>>>,
         > = vec![];
@@ -136,14 +145,18 @@ impl DNSServer {
             }
         }
 
-        if let Ok(((method, ret_message_china), _)) = select_ok(queries_china).await {
+        let duration = Duration::from_millis(3000);
+
+        if let Ok(((method, ret_message_china), _)) =
+            timeout(duration, select_ok(queries_china)).await?
+        {
             if self.is_china_site(&ret_message_china) {
-                return (method, true, ret_message_china);
+                return Ok((method, true, ret_message_china));
             }
         }
 
-        let (ret_message, _) = select_ok(queries_abroad).await.unwrap();
-        (ret_message.0, false, ret_message.1)
+        let (ret_message, _) = timeout(duration, select_ok(queries_abroad)).await??;
+        Ok((ret_message.0, false, ret_message.1))
     }
     fn is_china_site(&self, message: &Message<Vec<u8>>) -> bool {
         let mut answers_china = message.answer().unwrap().limit_to::<AllRecordData<_, _>>();
