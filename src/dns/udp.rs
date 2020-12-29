@@ -30,7 +30,7 @@ impl DNSServer {
                 }
             };
             ret_message = Message::from_octets(buf[..size].to_vec()).unwrap();
-            if self.is_valid_response(&ret_message) {
+            if self.is_valid_response_udp(&ret_message) {
                 break;
             }
         }

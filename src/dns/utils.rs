@@ -60,7 +60,7 @@ impl DNSServer {
         let target = msg.finish();
         Message::from_octets(target).unwrap()
     }
-    pub fn is_valid_response(&self, message: &Message<Vec<u8>>) -> bool {
+    pub fn is_valid_response_udp(&self, message: &Message<Vec<u8>>) -> bool {
         if !message.is_error() {
             if message.additional().is_ok() && message.additional().unwrap().count() != 0 {
                 if (message.answer().is_ok() && message.answer().unwrap().count() != 0)
@@ -69,6 +69,18 @@ impl DNSServer {
                     if message.opt().is_some() && message.opt().unwrap().dnssec_ok() {
                         return true;
                     }
+                }
+            }
+        }
+        false
+    }
+    pub fn is_valid_response(&self, message: &Message<Vec<u8>>) -> bool {
+        if !message.is_error() {
+            if message.additional().is_ok() && message.additional().unwrap().count() != 0 {
+                if (message.answer().is_ok() && message.answer().unwrap().count() != 0)
+                    || (message.authority().is_ok() && message.authority().unwrap().count() != 0)
+                {
+                    return true;
                 }
             }
         }
