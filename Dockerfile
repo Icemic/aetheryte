@@ -1,16 +1,18 @@
-FROM rust:1.46.0-alpine3.12
+FROM rust:1.48-slim-buster
 
-RUN apk add --update alpine-sdk
+RUN apt update && apt install -y --no-install-recommends build-essential libssl-dev pkg-config
+
+RUN cargo install sccache
 
 WORKDIR /app
 COPY . /app
 
 RUN cargo build --release
 
-FROM alpine:3.12
+FROM debian:buster-slim
 
 WORKDIR /
-COPY --from=0 /app/target/release/awaki /usr/local/bin
+COPY --from=0 /app/target/release/aetheryte /usr/local/bin
 
-EXPOSE 3333
-CMD ["awaki"]
+EXPOSE 3333 5353
+CMD ["aetheryte"]
