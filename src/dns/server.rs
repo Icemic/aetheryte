@@ -166,11 +166,17 @@ impl DNSServer {
         }
         if let Ok(answer_first_china) = answer.unwrap() {
             let rtype = answer_first_china.rtype().to_string();
+
+            if rtype == "CNAME" {
+                return true;
+            }
+
             let ip = answer_first_china.data().to_string();
             let ip: Ipv4Addr = match ip.parse() {
                 Ok(ip) => ip,
                 Err(_) => return false,
             };
+
             if rtype.starts_with('A') && self.geoip.lookup_country_code(&ip) == "CN" {
                 return true;
             }
