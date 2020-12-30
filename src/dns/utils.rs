@@ -1,5 +1,12 @@
 use crate::router::GeoIP;
-use domain::{base::Message, base::{MessageBuilder, iana::{Opcode, Rcode}, opt::rfc7830::PaddingMode}};
+use domain::{
+    base::Message,
+    base::{
+        iana::{Opcode, Rcode},
+        opt::rfc7830::PaddingMode,
+        MessageBuilder,
+    },
+};
 use domain::{
     base::{
         opt::Opt,
@@ -31,32 +38,31 @@ pub fn decorate_message<T: AsRecord>(
     origin: &Message<Vec<u8>>,
     answers: Option<Vec<T>>,
 ) -> Message<Vec<u8>> {
-    // let origin = Message::from_octets(origin_buf).unwrap();
-    // message.header().set_rd(true);
-    // message.opt().unwrap().rcode(header)
     let mut msg = MessageBuilder::new_vec();
     msg.header_mut().set_opcode(Opcode::Query);
     msg.header_mut().set_id(origin.header().id());
     msg.header_mut().set_rd(true);
-    msg.header_mut().set_aa(true);
+    // msg.header_mut().set_aa(true);
     msg.header_mut().set_ra(true);
     msg.header_mut().set_qr(false);
     msg.header_mut().set_rcode(Rcode::NoError);
 
-    let mut msg = msg.question();
-
-    for question in origin.question() {
-        let question = question.unwrap();
-        msg.push(question).unwrap();
-    }
-
-    let mut msg = msg.answer();
-    if let Some(answers) = answers {
-        msg.header_mut().set_qr(true);
+    let msg = if let Some(answers) = answers {
+        let mut _msg = msg.start_answer(origin, Rcode::NoError).unwrap();
+        _msg.header_mut().set_qr(true);
         for answer in answers {
-            msg.push(answer).unwrap();
+            _msg.push(answer).unwrap();
         }
-    }
+        _msg
+    } else {
+        let mut msg = msg.question();
+
+        for question in origin.question() {
+            let question = question.unwrap();
+            msg.push(question).unwrap();
+        }
+        msg.answer()
+    };
 
     let mut msg = msg.additional();
     let mut additionals_copied = false;

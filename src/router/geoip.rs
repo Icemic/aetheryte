@@ -20,10 +20,11 @@ impl GeoIP {
     }
     pub fn lookup_country_code(&self, ip: &Ipv4Addr) -> &str {
         if let Ok(info) = self.reader.lookup::<Country>(IpAddr::V4(*ip)) {
-            info.country.unwrap().iso_code.unwrap_or_default()
-        } else {
-            // println!("warning: error on lookup addr geo info");
-            "ERROR"
+            if let Some(country) = info.country {
+                return country.iso_code.unwrap_or_default();
+            }
         }
+        // println!("warning: error on lookup addr geo info");
+        "ERROR"
     }
 }
