@@ -22,7 +22,7 @@ async fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
-    let mut dns_server = DNSServer::new().await;
+    let dns_server = DNSServer::new().await;
     let traffic_router = Router::new().await;
 
     match try_join(dns_server.start(), traffic_router.start()).await {

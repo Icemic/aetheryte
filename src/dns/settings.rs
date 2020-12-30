@@ -4,7 +4,7 @@ use crate::dns::DNSServer;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DNSSettings {
     pub listen_ip: std::string::String,
     pub listen_port: u16,
@@ -13,7 +13,7 @@ pub struct DNSSettings {
     pub custom_hosts: HashMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DNSServerUpstream {
     pub address: String,
     pub hostname: String,
