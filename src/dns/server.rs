@@ -137,7 +137,7 @@ async fn run_task(
     for answer in answers {
         i += 1;
         let answer = answer.expect("parsing has failed.");
-        answer_log.push_str(format!("{} {},", answer.data().to_string(), answer.rtype()).as_str());
+        answer_log.push_str(format!("{} {}, ", answer.rtype(), answer.data().to_string()).as_str());
     }
 
     if i == 0 {
@@ -152,6 +152,7 @@ async fn run_task(
             i
         );
     } else {
+        answer_log.pop();
         answer_log.pop();
         println!(
             "[{:?} {} {}] {} --> {}",
