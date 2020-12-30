@@ -118,7 +118,7 @@ async fn run_task(
             response = r;
             is_china = is_china_;
         } else {
-            println!("[Warning] batch query timeout, skip the task.");
+            println!("[Warning] timeout on batch query {}, skip the task.", domain);
             return Err(Error::new(ErrorKind::Other, ""));
         }
     }
