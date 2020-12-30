@@ -19,11 +19,11 @@ pub async fn lookup_custom(
             let ret_message;
             match ip {
                 IpAddr::V4(ip4) => {
-                    let record = Record::new(Dname::root_ref(), Class::In, 60, A::new(ip4));
+                    let record = Record::new(Dname::vec_from_str(domain).unwrap(), Class::In, 60, A::new(ip4));
                     ret_message = decorate_message(&message, Some(vec![record]));
                 }
                 IpAddr::V6(ip6) => {
-                    let record = Record::new(Dname::root_ref(), Class::In, 60, Aaaa::new(ip6));
+                    let record = Record::new(Dname::vec_from_str(domain).unwrap(), Class::In, 60, Aaaa::new(ip6));
                     ret_message = decorate_message(&message, Some(vec![record]));
                 }
             }

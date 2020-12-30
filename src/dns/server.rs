@@ -44,7 +44,6 @@ impl DNSServer {
                     panic!("error on udp listening: {}", e);
                 }
             };
-        server.set_ttl(2).unwrap();
         DNSServer { server, geoip }
     }
 
@@ -118,7 +117,10 @@ async fn run_task(
             response = r;
             is_china = is_china_;
         } else {
-            println!("[Warning] timeout on batch query {}, skip the task.", domain);
+            println!(
+                "[Warning] timeout on batch query {}, skip the task.",
+                domain
+            );
             return Err(Error::new(ErrorKind::Other, ""));
         }
     }
@@ -132,19 +134,11 @@ async fn run_task(
         .limit_to::<AllRecordData<_, _>>();
 
     let mut i: u8 = 0;
+    let mut answer_log = String::new();
     for answer in answers {
         i += 1;
         let answer = answer.expect("parsing has failed.");
-        println!(
-            "[{:?} {} {}] {} --> {} ({}) #{}",
-            method,
-            if is_china { "China" } else { "Abroad" },
-            addr.to_string(),
-            domain,
-            answer.data().to_string(),
-            answer.rtype(),
-            i
-        );
+        answer_log.push_str(format!("{} {},", answer.data().to_string(), answer.rtype()).as_str());
     }
 
     if i == 0 {
@@ -157,6 +151,16 @@ async fn run_task(
             "-",
             "-",
             i
+        );
+    } else {
+        answer_log.pop();
+        println!(
+            "[{:?} {} {}] {} --> {}",
+            method,
+            if is_china { "China" } else { "Abroad" },
+            addr.to_string(),
+            domain,
+            answer_log
         );
     }
 

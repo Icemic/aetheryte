@@ -1,10 +1,8 @@
 use crate::router::GeoIP;
-use domain::{
-    base::Message,
-    base::{iana::Opcode, opt::rfc7830::PaddingMode, MessageBuilder},
-};
+use domain::{base::Message, base::{MessageBuilder, iana::{Opcode, Rcode}, opt::rfc7830::PaddingMode}};
 use domain::{
     base::{
+        opt::Opt,
         opt::{ClientSubnet, KeyTag, Padding, TcpKeepalive},
         record::AsRecord,
     },
@@ -42,6 +40,8 @@ pub fn decorate_message<T: AsRecord>(
     msg.header_mut().set_rd(true);
     msg.header_mut().set_aa(true);
     msg.header_mut().set_ra(true);
+    msg.header_mut().set_qr(false);
+    msg.header_mut().set_rcode(Rcode::NoError);
 
     let mut msg = msg.question();
 
@@ -52,30 +52,45 @@ pub fn decorate_message<T: AsRecord>(
 
     let mut msg = msg.answer();
     if let Some(answers) = answers {
+        msg.header_mut().set_qr(true);
         for answer in answers {
             msg.push(answer).unwrap();
         }
     }
 
     let mut msg = msg.additional();
-    msg.opt(|opt| {
-        opt.set_dnssec_ok(true);
-        opt.set_udp_payload_size(1024);
-        opt.set_version(0);
-        let option1 = ClientSubnet::new(24, 0, "122.233.242.188".parse().unwrap());
-        let option2 = ClientSubnet::new(64, 0, "240e:390:e5b:8280::1".parse().unwrap());
-        let padding = Padding::new(31, PaddingMode::Zero);
-        let tcp_keepalive = TcpKeepalive::new(20);
-        let key_tag = KeyTag::new(&[1, 2, 3, 82]);
+    let mut additionals_copied = false;
+    let options = origin.additional().unwrap();
+    for record in options {
+        let option = record
+            .unwrap()
+            .into_record::<Opt<&[u8]>>()
+            .unwrap()
+            .unwrap();
+        msg.push(&option).unwrap();
+        additionals_copied = true;
+    }
 
-        opt.push(&option1).unwrap();
-        opt.push(&option2).unwrap();
-        opt.push(&padding).unwrap();
-        opt.push(&tcp_keepalive).unwrap();
-        opt.push(&key_tag).unwrap();
-        Ok(())
-    })
-    .unwrap();
+    if !additionals_copied {
+        msg.opt(|opt| {
+            opt.set_dnssec_ok(true);
+            opt.set_udp_payload_size(1024);
+            opt.set_version(0);
+            let option1 = ClientSubnet::new(24, 0, "122.233.242.188".parse().unwrap());
+            let option2 = ClientSubnet::new(64, 0, "240e:390:e5b:8280::1".parse().unwrap());
+            let padding = Padding::new(31, PaddingMode::Zero);
+            let tcp_keepalive = TcpKeepalive::new(20);
+            let key_tag = KeyTag::new(&[1, 2, 3, 82]);
+
+            opt.push(&option1).unwrap();
+            opt.push(&option2).unwrap();
+            opt.push(&padding).unwrap();
+            opt.push(&tcp_keepalive).unwrap();
+            opt.push(&key_tag).unwrap();
+            Ok(())
+        })
+        .unwrap();
+    }
 
     let buf = msg.finish();
     Message::from_octets(buf).unwrap()
@@ -91,8 +106,9 @@ pub fn is_valid_response_udp(message: &Message<Vec<u8>>) -> bool {
                 }
             }
         }
+        return false;
     }
-    false
+    true
 }
 pub fn is_valid_response(message: &Message<Vec<u8>>) -> bool {
     if !message.is_error() {
@@ -103,8 +119,9 @@ pub fn is_valid_response(message: &Message<Vec<u8>>) -> bool {
                 return true;
             }
         }
+        return false;
     }
-    false
+    true
 }
 // add 2-byte head to packet
 pub fn get_wrapped_packet(message: &Message<Vec<u8>>) -> Vec<u8> {
@@ -123,23 +140,23 @@ pub fn is_china_site(message: &Message<Vec<u8>>, geoip: Arc<GeoIP>) -> bool {
     for answer in answers {
         if let Ok(answer_first_china) = answer {
             let rtype = answer_first_china.rtype().to_string();
-    
+
             if rtype != "A" {
                 continue;
             }
-    
+
             let ip = answer_first_china.data().to_string();
             let ip: Ipv4Addr = match ip.parse() {
                 Ok(ip) => ip,
                 Err(_) => return false,
             };
-    
+
             if rtype.starts_with('A') && geoip.lookup_country_code(&ip) == "CN" {
                 is_china = true;
                 break;
             }
         }
     }
-    
+
     is_china
 }
