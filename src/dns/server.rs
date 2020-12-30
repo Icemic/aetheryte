@@ -88,7 +88,7 @@ impl DNSServer {
                         .expect("failed to send back via udp.");
                 }
                 Err(err) => {
-                    println!("{}", err.to_string());
+                    println!("[Error {}] {}", addr.to_string(), err.to_string());
                 }
             }
         }
@@ -117,11 +117,10 @@ async fn run_task(
             response = r;
             is_china = is_china_;
         } else {
-            println!(
-                "[Warning] timeout on batch query {}, skip the task.",
-                domain
-            );
-            return Err(Error::new(ErrorKind::Other, ""));
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("Timeout on batch query {}, skip the task.", domain),
+            ));
         }
     }
 
