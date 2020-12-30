@@ -2,7 +2,7 @@ use super::{
     custom::lookup_custom,
     doh::lookup_doh,
     dot::lookup_dot,
-    settings::{self, DNSServerUpstream, DNSSettings},
+    settings::{DNSServerUpstream, DNSSettings},
     tcp::lookup_tcp,
     udp::lookup_udp,
     utils::{decorate_message, is_china_site, QueryResponse, QueryType},
@@ -14,15 +14,10 @@ use domain::{
     base::{Dname, Message, Record},
     rdata::AllRecordData,
 };
-use futures::{
-    future::{select, select_ok},
-    pin_mut, Future,
-};
+use futures::future::select_ok;
 use glob::Pattern;
 use std::io::{Error, ErrorKind};
-use std::rc::Rc;
 use std::sync::Arc;
-use std::{net::Ipv4Addr, pin::Pin};
 use tokio::net::UdpSocket;
 use tokio::time::{timeout, Duration};
 
@@ -85,12 +80,18 @@ impl DNSServer {
                 buf[..size].to_vec(),
                 self.geoip.clone(),
             );
-            let buf = tokio::spawn(task).await.unwrap().unwrap();
 
-            self.server
-                .send_to(&buf, addr)
-                .await
-                .expect("failed to send back via udp.");
+            match tokio::spawn(task).await.unwrap() {
+                Ok(buf) => {
+                    self.server
+                        .send_to(&buf, addr)
+                        .await
+                        .expect("failed to send back via udp.");
+                }
+                Err(err) => {
+                    println!("{}", err.to_string());
+                }
+            }
         }
         #[allow(unreachable_code)]
         Ok(())
