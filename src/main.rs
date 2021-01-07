@@ -14,7 +14,7 @@ use std::process::exit;
 
 #[tokio::main]
 async fn main() {
-    println!("Awaki is running.");
+    println!("Aetheryte is running.");
 
     ctrlc::set_handler(|| {
         println!("\nGoodbye.");
