@@ -176,7 +176,6 @@ async fn run_task(
 
     let (ret_message, method) = get_message_from_response(response);
 
-    // let ret_message = Message::from_octets(ret_message).unwrap();
     let answers = ret_message
         .answer()
         .unwrap()
@@ -277,7 +276,7 @@ async fn batch_query(
         }
     }
 
-    let duration = Duration::from_millis(1000);
+    let duration = Duration::from_millis(5000);
 
     let (response, _) = timeout(duration, select_ok(queries_china)).await??;
     let (ret_message, _) = get_message_from_response_ref(&response);
