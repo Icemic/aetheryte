@@ -1,9 +1,3 @@
-extern crate domain;
-extern crate maxminddb;
-extern crate rustls_native_certs;
-extern crate tokio;
-extern crate tokio_rustls;
-
 mod dns;
 mod router;
 

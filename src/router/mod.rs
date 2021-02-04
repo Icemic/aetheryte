@@ -7,7 +7,7 @@ use futures::FutureExt;
 pub use geoip::GeoIP;
 use passthrough::passthrough;
 use proxy::proxy;
-use std::process::exit;
+use std::{io::Error, process::exit};
 use tokio::net::TcpListener;
 use utils::get_original_dest;
 
@@ -34,15 +34,9 @@ impl Router {
         Router { geoip, server }
     }
 
-    pub async fn start(&self) -> Result<(), ()> {
+    pub async fn start(&self) -> Result<(), Error> {
         loop {
-            let (socket, addr) = match self.server.accept().await {
-                Ok(socket) => socket,
-                Err(_) => {
-                    println!("error on accept socket");
-                    continue;
-                }
-            };
+            let (socket, addr) = self.server.accept().await?;
 
             let dst_addr = match get_original_dest(&socket) {
                 Ok(addr) => addr,

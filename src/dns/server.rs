@@ -14,23 +14,32 @@ use domain::{
     base::{Dname, Message, Record},
     rdata::AllRecordData,
 };
-use futures::future::select_ok;
+use futures::future::{select_ok, try_join};
 use glob::Pattern;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::time::{timeout, Duration};
 
 pub struct DNSServer {
-    server: UdpSocket,
+    server_udp: Arc<UdpSocket>,
+    server_tcp: Arc<TcpListener>,
     geoip: Arc<GeoIP>,
+    settings: Arc<DNSSettings>,
+    custom_patterns: Arc<Vec<(Pattern, String)>>,
+}
+
+enum TargetType {
+    UDP(String),
+    TCP(TcpStream, String),
 }
 
 impl DNSServer {
     pub async fn new() -> Self {
         let geoip = Arc::new(GeoIP::new().await);
-        let settings = Self::load_settings().await;
-        let server =
+        let settings = Arc::new(Self::load_settings().await);
+        let custom_patterns = Arc::new(Self::load_patterns(Self::load_settings().await));
+        let server_udp =
             match UdpSocket::bind(format!("{}:{}", settings.listen_ip, settings.listen_port)).await
             {
                 Ok(server) => {
@@ -44,14 +53,39 @@ impl DNSServer {
                     panic!("error on udp listening: {}", e);
                 }
             };
-        DNSServer { server, geoip }
+        let server_tcp =
+            match TcpListener::bind(format!("{}:{}", settings.listen_ip, settings.listen_port))
+                .await
+            {
+                Ok(server) => {
+                    println!(
+                        "DNS service now is serving on tcp://{}:{}",
+                        settings.listen_ip, settings.listen_port
+                    );
+                    server
+                }
+                Err(e) => {
+                    panic!("error on udp listening: {}", e);
+                }
+            };
+
+        let server_udp = Arc::new(server_udp);
+        let server_tcp = Arc::new(server_tcp);
+
+        DNSServer {
+            server_udp,
+            server_tcp,
+            geoip,
+            settings,
+            custom_patterns,
+        }
     }
 
-    pub fn load_patterns(settings: &DNSSettings) -> Vec<(Pattern, String)> {
+    pub fn load_patterns(settings: DNSSettings) -> Vec<(Pattern, String)> {
         let mut patterns = vec![];
-        for (key, value) in &settings.custom_hosts {
+        for (key, value) in settings.custom_hosts {
             if let Ok(pattern) = Pattern::new(key.as_str()) {
-                patterns.push((pattern, value.clone()));
+                patterns.push((pattern, value));
             } else {
                 println!("[Custom] Failed to load pattern {}", key);
             }
@@ -59,50 +93,66 @@ impl DNSServer {
         patterns
     }
 
-    pub async fn start(&self) -> Result<(), ()> {
-        let settings = Self::load_settings().await;
-        let custom_patterns = Self::load_patterns(&settings);
+    pub async fn start_udp(&self) -> Result<(), Error> {
         let mut buf = vec![0u8; 4096];
         loop {
-            let (size, addr) = match self.server.recv_from(&mut buf).await {
-                Ok(socket) => socket,
-                Err(_) => {
-                    println!("error on accept socket");
-                    continue;
-                }
-            };
+            let (size, addr) = self.server_udp.recv_from(&mut buf).await?;
 
             let task = run_task(
-                settings.clone(),
-                custom_patterns.clone(),
-                addr.to_string(),
-                buf[..size].to_vec(),
+                self.server_udp.clone(),
+                self.server_tcp.clone(),
+                self.settings.clone(),
+                self.custom_patterns.clone(),
                 self.geoip.clone(),
+                TargetType::UDP(addr.to_string()),
+                buf[..size].to_vec(),
             );
 
-            match tokio::spawn(task).await.unwrap() {
-                Ok(buf) => {
-                    self.server
-                        .send_to(&buf, addr)
-                        .await
-                        .expect("failed to send back via udp.");
-                }
-                Err(err) => {
-                    println!("[Error {}] {}", addr.to_string(), err.to_string());
-                }
-            }
+            tokio::spawn(task);
         }
         #[allow(unreachable_code)]
         Ok(())
     }
+
+    pub async fn start_tcp(&self) -> Result<(), Error> {
+        let mut buf = vec![0u8; 4096];
+        loop {
+            let (socket, addr) = self.server_tcp.accept().await?;
+
+            socket.readable().await?;
+            let size = socket.try_read(&mut buf)?;
+
+            let task = run_task(
+                self.server_udp.clone(),
+                self.server_tcp.clone(),
+                self.settings.clone(),
+                self.custom_patterns.clone(),
+                self.geoip.clone(),
+                TargetType::TCP(socket, addr.to_string()),
+                buf[..size].to_vec(),
+            );
+
+            tokio::spawn(task);
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+
+    pub async fn start(&self) -> Result<(), Error> {
+        try_join(self.start_udp(), self.start_tcp()).await?;
+        Ok(())
+    }
 }
+
 async fn run_task(
-    settings: DNSSettings,
-    custom_patterns: Vec<(Pattern, String)>,
-    addr: String,
-    buf: Vec<u8>,
+    server_udp: Arc<UdpSocket>,
+    _: Arc<TcpListener>,
+    settings: Arc<DNSSettings>,
+    custom_patterns: Arc<Vec<(Pattern, String)>>,
     geoip: Arc<GeoIP>,
-) -> Result<Vec<u8>, Error> {
+    target: TargetType,
+    buf: Vec<u8>,
+) -> Result<(), Error> {
     let message = Message::from_octets(buf).unwrap();
     let domain = message.first_question().unwrap().qname().to_string();
 
@@ -140,12 +190,37 @@ async fn run_task(
         answer_log.push_str(format!("{} {}, ", answer.rtype(), answer.data().to_string()).as_str());
     }
 
+    let ret_buf = ret_message.into_octets();
+    let t;
+    let source;
+    match target {
+        TargetType::UDP(addr) => {
+            server_udp
+                .send_to(&ret_buf, addr.clone())
+                .await
+                .expect("failed to send back via udp.");
+
+            t = "UDP";
+            source = addr;
+        }
+        TargetType::TCP(socket, addr) => {
+            socket.writable().await?;
+            socket
+                .try_write(&ret_buf)
+                .expect("failed to send back via tcp.");
+
+            t = "TCP";
+            source = addr
+        }
+    }
+
     if i == 0 {
         println!(
-            "[{:?} {} {}] {} --> {} ({}) #{}",
+            "<{}> -> [{:?} {} {}] {} --> {} ({}) #{}",
+            t,
             method,
             if is_china { "China" } else { "Abroad" },
-            addr.to_string(),
+            source,
             domain,
             "-",
             "-",
@@ -155,16 +230,17 @@ async fn run_task(
         answer_log.pop();
         answer_log.pop();
         println!(
-            "[{:?} {} {}] {} --> {}",
+            "<{}> -> [{:?} {} {}] {} --> {}",
+            t,
             method,
             if is_china { "China" } else { "Abroad" },
-            addr.to_string(),
+            source,
             domain,
             answer_log
         );
     }
 
-    Ok(ret_message.into_octets())
+    Ok(())
 }
 
 async fn batch_query(
