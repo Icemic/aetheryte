@@ -45,7 +45,7 @@ pub async fn lookup_doh(
     // It stores the response message
     let mut packet = Vec::with_capacity(1024);
 
-    timeout(Duration::from_millis(1000), socket.read_buf(&mut packet)).await??;
+    timeout(Duration::from_millis(2000), socket.read_buf(&mut packet)).await??;
 
     if std::str::from_utf8(&packet[..15]).unwrap() != "HTTP/1.1 200 OK" {
         return Err(Error::new(

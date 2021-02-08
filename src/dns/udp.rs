@@ -18,7 +18,7 @@ pub async fn lookup_udp(
     socket.connect(remote_addr).await?;
     socket.send(message.as_octets()).await?;
 
-    let duration = tokio::time::Duration::from_millis(500);
+    let duration = tokio::time::Duration::from_millis(2000);
     let mut ret_message;
     loop {
         let mut buf = vec![0u8; 1024];

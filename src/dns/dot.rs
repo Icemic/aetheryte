@@ -34,7 +34,7 @@ pub async fn lookup_dot(
 
     let mut packet = Vec::with_capacity(1024);
 
-    timeout(Duration::from_millis(1000), socket.read_buf(&mut packet)).await??;
+    timeout(Duration::from_millis(2000), socket.read_buf(&mut packet)).await??;
 
     // tips: here omits checking packet size
     let ret_message = Message::from_octets(packet[2..].to_vec()).unwrap();
