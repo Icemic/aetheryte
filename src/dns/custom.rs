@@ -1,4 +1,4 @@
-use super::utils::{decorate_message, QueryResponse};
+use super::{lookup::utils::QueryResponse, utils::decorate_message};
 use domain::base::iana::Class;
 use domain::base::{Dname, Message, Record};
 use domain::rdata::{Aaaa, A};
@@ -19,11 +19,21 @@ pub async fn lookup_custom(
             let ret_message;
             match ip {
                 IpAddr::V4(ip4) => {
-                    let record = Record::new(Dname::vec_from_str(domain).unwrap(), Class::In, 120, A::new(ip4));
+                    let record = Record::new(
+                        Dname::vec_from_str(domain).unwrap(),
+                        Class::In,
+                        120,
+                        A::new(ip4),
+                    );
                     ret_message = decorate_message(&message, Some(vec![record]));
                 }
                 IpAddr::V6(ip6) => {
-                    let record = Record::new(Dname::vec_from_str(domain).unwrap(), Class::In, 120, Aaaa::new(ip6));
+                    let record = Record::new(
+                        Dname::vec_from_str(domain).unwrap(),
+                        Class::In,
+                        120,
+                        Aaaa::new(ip6),
+                    );
                     ret_message = decorate_message(&message, Some(vec![record]));
                 }
             }

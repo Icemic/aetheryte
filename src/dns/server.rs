@@ -1,11 +1,9 @@
 use super::{
+    cache::lookup_cache,
     custom::lookup_custom,
-    doh::lookup_doh,
-    dot::lookup_dot,
-    settings::{DNSServerUpstream, DNSSettings},
-    tcp::lookup_tcp,
-    udp::lookup_udp,
-    utils::{decorate_message, is_china_site, QueryResponse, QueryType},
+    lookup::{batch_query, utils::get_message_from_response},
+    settings::DNSSettings,
+    utils::decorate_message,
 };
 use crate::router::GeoIP;
 use core::panic;
@@ -14,16 +12,20 @@ use domain::{
     base::{Dname, Message, Record},
     rdata::AllRecordData,
 };
-use futures::future::{select_ok, try_join};
+use futures::future::try_join;
 use glob::Pattern;
+use redis::{aio::Connection, AsyncCommands};
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::time::{timeout, Duration};
+use tokio::{
+    net::{TcpListener, TcpStream, UdpSocket},
+    sync::Mutex,
+};
 
 pub struct DNSServer {
     server_udp: Arc<UdpSocket>,
     server_tcp: Arc<TcpListener>,
+    redis: Arc<Mutex<Option<Connection>>>,
     geoip: Arc<GeoIP>,
     settings: Arc<DNSSettings>,
     custom_patterns: Arc<Vec<(Pattern, String)>>,
@@ -72,10 +74,27 @@ impl DNSServer {
         let server_udp = Arc::new(server_udp);
         let server_tcp = Arc::new(server_tcp);
 
+        let mut redis = None;
+        if let Some(redis_server) = &settings.redis_server {
+            let client = redis::Client::open(redis_server.clone()).unwrap();
+            redis = match client.get_async_connection().await {
+                Ok(server) => {
+                    println!("Using redis at {} as cache.", redis_server);
+                    Some(server)
+                }
+                Err(e) => {
+                    panic!("error on redis instance: {}", e);
+                }
+            };
+        }
+
+        let redis = Arc::new(Mutex::new(redis));
+
         DNSServer {
             server_udp,
             server_tcp,
             geoip,
+            redis,
             settings,
             custom_patterns,
         }
@@ -103,6 +122,7 @@ impl DNSServer {
                 self.server_tcp.clone(),
                 self.settings.clone(),
                 self.custom_patterns.clone(),
+                self.redis.clone(),
                 self.geoip.clone(),
                 TargetType::UDP(addr.to_string()),
                 buf[..size].to_vec(),
@@ -127,6 +147,7 @@ impl DNSServer {
                 self.server_tcp.clone(),
                 self.settings.clone(),
                 self.custom_patterns.clone(),
+                self.redis.clone(),
                 self.geoip.clone(),
                 TargetType::TCP(socket, addr.to_string()),
                 buf[..size].to_vec(),
@@ -149,6 +170,7 @@ async fn run_task(
     _: Arc<TcpListener>,
     settings: Arc<DNSSettings>,
     custom_patterns: Arc<Vec<(Pattern, String)>>,
+    redis: Arc<Mutex<Option<Connection>>>,
     geoip: Arc<GeoIP>,
     target: TargetType,
     buf: Vec<u8>,
@@ -157,10 +179,15 @@ async fn run_task(
     let domain = message.first_question().unwrap().qname().to_string();
 
     let is_china;
+    let mut is_cache = false;
     let response;
     if let Ok(r) = lookup_custom(&message, &custom_patterns, &domain).await {
         response = r;
         is_china = true;
+    } else if let Ok((r, china)) = lookup_cache(&message, &redis, &domain).await {
+        response = r;
+        is_china = china;
+        is_cache = true;
     } else {
         let message = decorate_message::<Record<Dname<&[u8]>, A>>(&message, None);
         if let Ok((r, is_china_)) = batch_query(&message, &settings.upstreams, geoip).await {
@@ -190,6 +217,27 @@ async fn run_task(
     }
 
     let ret_buf = ret_message.into_octets();
+
+    // save to cache
+    let mut redis = redis.lock().await;
+    if !is_cache && redis.is_some() && settings.cache_expire.is_some() {
+        let expire = settings.cache_expire.unwrap();
+        let redis = redis.as_mut().unwrap();
+        let mut cache_buf = ret_buf.clone();
+        cache_buf.push(is_china as u8);
+        match redis
+            .set_ex::<String, Vec<u8>, String>(domain.clone(), cache_buf, expire)
+            .await
+        {
+            Ok(_) => {
+                //
+            }
+            Err(err) => {
+                println!("Failed to save data to cache ({}), ignored.", err);
+            }
+        };
+    }
+
     let t;
     let source;
     match target {
@@ -240,84 +288,4 @@ async fn run_task(
     }
 
     Ok(())
-}
-
-async fn batch_query(
-    message: &Message<Vec<u8>>,
-    upstreams: &Vec<DNSServerUpstream>,
-    geoip: Arc<GeoIP>,
-) -> Result<(QueryResponse, bool), Error> {
-    let mut queries_china = vec![];
-    let mut queries_abroad = vec![];
-
-    for upstream in upstreams {
-        let queries;
-        if upstream.is_china {
-            queries = &mut queries_china;
-        } else {
-            queries = &mut queries_abroad;
-        }
-
-        if upstream.enable_udp {
-            let ret_message = lookup(QueryType::UDP, message, &upstream);
-            queries.push(Box::pin(ret_message));
-        }
-        if upstream.enable_tcp {
-            let ret_message = lookup(QueryType::TCP, message, &upstream);
-            queries.push(Box::pin(ret_message));
-        }
-        if upstream.enable_dot {
-            let ret_message = lookup(QueryType::DoT, message, &upstream);
-            queries.push(Box::pin(ret_message));
-        }
-        if upstream.enable_doh {
-            let ret_message = lookup(QueryType::DoH, message, &upstream);
-            queries.push(Box::pin(ret_message));
-        }
-    }
-
-    let duration = Duration::from_millis(5000);
-
-    let (response, _) = timeout(duration, select_ok(queries_china)).await??;
-    let (ret_message, _) = get_message_from_response_ref(&response);
-    if is_china_site(&ret_message, geoip) {
-        return Ok((response, true));
-    }
-
-    let (response, _) = timeout(duration, select_ok(queries_abroad)).await??;
-    Ok((response, false))
-}
-
-async fn lookup(
-    t: QueryType,
-    message: &Message<Vec<u8>>,
-    upstream: &DNSServerUpstream,
-) -> Result<QueryResponse, Error> {
-    match t {
-        QueryType::UDP => lookup_udp(message, &upstream.address).await,
-        QueryType::TCP => lookup_tcp(message, &upstream.address).await,
-        QueryType::DoT => lookup_dot(message, &upstream.address, &upstream.hostname).await,
-        QueryType::DoH => lookup_doh(message, &upstream.address, &upstream.hostname).await,
-        QueryType::Custom => panic!("Custom query should be performed independently"),
-    }
-}
-
-fn get_message_from_response(response: QueryResponse) -> (Message<Vec<u8>>, QueryType) {
-    match response {
-        QueryResponse::UDP(message) => (message, QueryType::UDP),
-        QueryResponse::TCP(message) => (message, QueryType::TCP),
-        QueryResponse::DoT(message) => (message, QueryType::DoT),
-        QueryResponse::DoH(message) => (message, QueryType::DoH),
-        QueryResponse::Custom(message) => (message, QueryType::Custom),
-    }
-}
-
-fn get_message_from_response_ref(response: &QueryResponse) -> (&Message<Vec<u8>>, QueryType) {
-    match response {
-        QueryResponse::UDP(message) => (message, QueryType::UDP),
-        QueryResponse::TCP(message) => (message, QueryType::TCP),
-        QueryResponse::DoT(message) => (message, QueryType::DoT),
-        QueryResponse::DoH(message) => (message, QueryType::DoH),
-        QueryResponse::Custom(message) => (message, QueryType::Custom),
-    }
 }

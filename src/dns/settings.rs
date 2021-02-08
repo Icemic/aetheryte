@@ -6,8 +6,10 @@ use tokio::fs;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DNSSettings {
-    pub listen_ip: std::string::String,
+    pub listen_ip: String,
     pub listen_port: u16,
+    pub redis_server: Option<String>,
+    pub cache_expire: Option<usize>,
     pub query_timeout: u32,
     pub upstreams: Vec<DNSServerUpstream>,
     pub custom_hosts: HashMap<String, String>,
