@@ -1,4 +1,4 @@
-use super::{lookup::utils::QueryResponse, utils::decorate_message};
+use super::{lookup::utils::QueryResponse, utils::get_response_message};
 use domain::base::iana::Class;
 use domain::base::{Dname, Message, Record};
 use domain::rdata::{Aaaa, A};
@@ -25,7 +25,8 @@ pub async fn lookup_custom(
                         120,
                         A::new(ip4),
                     );
-                    ret_message = decorate_message(&message, Some(vec![record]));
+                    ret_message =
+                        get_response_message(message.header().id(), &message, Some(vec![record]));
                 }
                 IpAddr::V6(ip6) => {
                     let record = Record::new(
@@ -34,7 +35,8 @@ pub async fn lookup_custom(
                         120,
                         Aaaa::new(ip6),
                     );
-                    ret_message = decorate_message(&message, Some(vec![record]));
+                    ret_message =
+                        get_response_message(message.header().id(), &message, Some(vec![record]));
                 }
             }
 

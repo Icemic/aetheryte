@@ -3,15 +3,11 @@ use super::{
     custom::lookup_custom,
     lookup::{batch_query, utils::get_message_from_response},
     settings::DNSSettings,
-    utils::decorate_message,
+    utils::get_request_message,
 };
 use crate::router::GeoIP;
 use core::panic;
-use domain::rdata::A;
-use domain::{
-    base::{Dname, Message, Record},
-    rdata::AllRecordData,
-};
+use domain::{base::Message, rdata::AllRecordData};
 use futures::future::try_join;
 use glob::Pattern;
 use redis::{aio::Connection, AsyncCommands};
@@ -176,7 +172,14 @@ async fn run_task(
     buf: Vec<u8>,
 ) -> Result<(), Error> {
     let message = Message::from_octets(buf).unwrap();
-    let domain = message.first_question().unwrap().qname().to_string();
+    let question = message.first_question().unwrap();
+    let domain = question.qname().to_string();
+    let identifier = format!(
+        "{}|{}|{}",
+        question.qname(),
+        question.qtype(),
+        question.qclass()
+    );
 
     let is_china;
     let mut is_cache = false;
@@ -184,12 +187,12 @@ async fn run_task(
     if let Ok(r) = lookup_custom(&message, &custom_patterns, &domain).await {
         response = r;
         is_china = true;
-    } else if let Ok((r, china)) = lookup_cache(&message, &redis, &domain).await {
+    } else if let Ok((r, china)) = lookup_cache(&message, &redis, &identifier).await {
         response = r;
         is_china = china;
         is_cache = true;
     } else {
-        let message = decorate_message::<Record<Dname<&[u8]>, A>>(&message, None);
+        let message = get_request_message(&message);
         if let Ok((r, is_china_)) = batch_query(&message, &settings.upstreams, geoip).await {
             response = r;
             is_china = is_china_;
@@ -226,7 +229,7 @@ async fn run_task(
         let mut cache_buf = ret_buf.clone();
         cache_buf.push(is_china as u8);
         match redis
-            .set_ex::<String, Vec<u8>, String>(domain.clone(), cache_buf, expire)
+            .set_ex::<String, Vec<u8>, String>(identifier, cache_buf, expire)
             .await
         {
             Ok(_) => {
