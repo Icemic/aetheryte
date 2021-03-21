@@ -1,12 +1,13 @@
 use futures::future::try_join;
-use std::net::SocketAddrV4;
+use std::net::IpAddr;
 use tokio::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 pub async fn proxy(
     mut inbound: TcpStream,
-    dst_addr: SocketAddrV4,
+    dst_ip: IpAddr,
+    dst_port: u16,
     info_message: String,
 ) -> Result<String, String> {
     let mut outbound = match TcpStream::connect("127.0.0.1:1086").await {
@@ -31,12 +32,12 @@ pub async fn proxy(
 
     let mut data: [u8; 10] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0];
     let mut i = 4;
-    for item in dst_addr.ip().to_string().split(".") {
+    for item in dst_ip.to_string().split(".") {
         data[i] = item.parse::<u8>().unwrap();
         i = i + 1;
     }
 
-    let port_big_endian = dst_addr.port().to_be_bytes();
+    let port_big_endian = dst_port.to_be_bytes();
 
     data[8] = port_big_endian[0];
     data[9] = port_big_endian[1];

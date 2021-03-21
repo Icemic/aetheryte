@@ -1,6 +1,6 @@
 use crate::router::GeoIP;
 use domain::{base::Message, rdata::AllRecordData};
-use std::{net::Ipv4Addr, sync::Arc};
+use std::{net::IpAddr, sync::Arc};
 
 #[derive(Debug)]
 pub enum QueryType {
@@ -44,7 +44,7 @@ pub fn is_china_site(message: &Message<Vec<u8>>, geoip: Arc<GeoIP>) -> bool {
             }
 
             let ip = answer_first_china.data().to_string();
-            let ip: Ipv4Addr = match ip.parse() {
+            let ip: IpAddr = match ip.parse() {
                 Ok(ip) => ip,
                 Err(_) => return false,
             };

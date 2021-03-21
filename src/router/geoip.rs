@@ -1,5 +1,5 @@
 use maxminddb::{geoip2::Country, Reader};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 use tokio::fs;
 
 pub struct GeoIP {
@@ -18,8 +18,8 @@ impl GeoIP {
             }
         }
     }
-    pub fn lookup_country_code(&self, ip: &Ipv4Addr) -> &str {
-        if let Ok(info) = self.reader.lookup::<Country>(IpAddr::V4(*ip)) {
+    pub fn lookup_country_code(&self, ip: &IpAddr) -> &str {
+        if let Ok(info) = self.reader.lookup::<Country>(*ip) {
             if let Some(country) = info.country {
                 return country.iso_code.unwrap_or_default();
             }

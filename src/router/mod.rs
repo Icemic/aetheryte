@@ -38,16 +38,14 @@ impl Router {
         loop {
             let (socket, addr) = self.server.accept().await?;
 
-            let dst_addr = match get_original_dest(&socket) {
+            let (dst_ip, dst_port) = match get_original_dest(&socket) {
                 Ok(addr) => addr,
                 Err(err) => {
                     println!("{}", err);
                     continue;
                 }
             };
-            let dst_ip = dst_addr.ip();
-            let dst_port = dst_addr.port();
-            let country_code = self.geoip.lookup_country_code(dst_ip);
+            let country_code = self.geoip.lookup_country_code(&dst_ip);
 
             let info_message = format!(
                 "from {}, to {}:{} in {}",
@@ -55,7 +53,7 @@ impl Router {
             );
 
             if country_code != "CN" {
-                let transfer = proxy(socket, dst_addr, info_message).map(|r| {
+                let transfer = proxy(socket, dst_ip, dst_port, info_message).map(|r| {
                     if let Err(e) = r {
                         println!("Failed to proxy {}", e);
                     } else if let Ok(info) = r {
@@ -64,7 +62,7 @@ impl Router {
                 });
                 tokio::spawn(transfer);
             } else {
-                let transfer = passthrough(socket, dst_addr, info_message).map(|r| {
+                let transfer = passthrough(socket, dst_ip, dst_port, info_message).map(|r| {
                     if let Err(e) = r {
                         println!("Failed to transfer {}", e);
                     } else if let Ok(info) = r {
