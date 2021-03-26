@@ -12,7 +12,8 @@ futures = "0.3"
 glob = "0.2"
 libc = "0.2"
 maxminddb = "0.17"
-nix = "0.19"
+# nix = "0.19"
+nix = { git = "https://github.com/Icemic/nix.git" }
 redis = {version = "0.19", features = ["tokio-comp", "connection-manager"]}
 rustls-native-certs = "0.5"
 serde = {version = "1.0", features = ["derive"]}
