@@ -14,7 +14,7 @@ use utils::{get_original6_dest, get_original_dest};
 pub struct Router {
     geoip: GeoIP,
     server_ipv4: TcpListener,
-    server_ipv6: TcpListener,
+    server_ipv6: Option<TcpListener>,
 }
 
 impl Router {
@@ -35,11 +35,11 @@ impl Router {
         let server_ipv6 = match TcpListener::bind("[::1]:3333").await {
             Ok(server) => {
                 println!("Traffic routing service now is serving on tcp://[::1]:3333");
-                server
+                Some(server)
             }
             Err(e) => {
-                println!("error on tcp listening: {}", e);
-                exit(-1);
+                println!("error on tcp listening: {}, maybe there's no ipv6 environment, skipped.", e);
+                None
             }
         };
 
@@ -101,8 +101,12 @@ impl Router {
     }
 
     pub async fn start_for_ipv6(&self) -> Result<(), Error> {
+        if self.server_ipv6.is_none() {
+            return Ok(());
+        }
+        let server_ipv6 = self.server_ipv6.as_ref().unwrap();
         loop {
-            let (socket, addr) = self.server_ipv6.accept().await?;
+            let (socket, addr) = server_ipv6.accept().await?;
 
             let (dst_ip, dst_port) = match get_original6_dest(&socket) {
                 Ok(addr) => addr,
